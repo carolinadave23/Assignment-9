@@ -1,17 +1,47 @@
 1. Briefly describe the concept of "Stack Frame".
-
-
-
+  A stack frame (or activation record) is the area of the stack set aside for passed arguments, subroutine return address, local
+  variables, and saved registers. The stack frame is created by the following sequential steps:
+      1. Passed arguments, if any, are pushed on the stack.
+      2. The subroutine is called, causing the subroutine return address to be pushed on the stack.
+      3. As the subroutine begins to execute, EBP is pushed on the stack.
+      4. EBP is set equal to ESP. From this point on, EBP acts as a base reference for all of the subroutine
+         parameters.
+      5. If there are local variables, ESP is decremented to reserve space for the variables on the stack.
+      6. If any registers need to be saved, they are pushed on the stack.
+  The structure of a stack frame is directly affected by a program’s memory model and its choice of argument passing convention.
 
 2. Briefly describe the concept of "Calling Convention".
-
-
+  A calling convention is an implementation-level (low-level) scheme for how subroutines receive parameters from their caller
+  and how they return a result. Differences in various implementations include where parameters, return values, return addresses
+  and scope links are placed, and how the tasks of preparing for a function call and restoring the environment afterward are divided
+  between the caller and the callee. Calling conventions may be related to a particular programming language's evaluation strategy
+  but most often are not considered part of it (or vice versa), as the evaluation strategy is usually defined on a higher abstraction
+  level and seen as a part of the language rather than as a low-level implementation detail of a particular language's compiler.
 
 
 3. Why do the book examples always start functions with "push ebp" and "mov ebp, esp"?
-
-
-
+  Subroutines often save the current contents of registers on the stack before modifying them. This is a good practice, because the
+  original values can be restored just before the subroutine returns. Ideally, the registers in question should be pushed on the stack
+  just after setting EBP to ESP, and just before reserving space for local variables. This helps us to avoid changing offsets
+  of existing stack parameters. For example, assume that the following MySub procedure has one stack parameter. It pushes ECX and EDX
+  after setting EBP to the base of the stack frame and loads the stack parameter into EAX:
+  
+  MySub PROC
+  push ebp ; save base pointer
+  mov ebp,esp ; base of stack frame
+  push ecx
+  push edx ; save EDX
+  mov eax,[ebp+8] ; get the stack parameter
+  .
+  .
+  pop edx ; restore saved registers
+  pop ecx
+  pop ebp ; restore base pointer
+  ret ; clean up the stack
+  MySub ENDP
+  
+  After it is initialized, EBP’s contents remain fixed throughout the procedure. Pushing ECX and EDX does not affect the displacement
+  from EBP of parameters already on the stack because the stack grows below EBP.
 
 4. What is the x64 equivalent to "push ebp" and "mov ebp, esp"?
 
@@ -19,9 +49,66 @@
 
 
 5. What are the differences between "Microsoft x64 calling convention" and "System V AMD64 ABI calling convention"?
+  Microsoft follows a consistent scheme for passing parameters and calling subroutines in 64-bit programs, known as the Microsoft x64
+  calling convention. This convention is used by C and C++ compilers, as well as by the Windows API library. The only time you need to
+  use this calling convention is when you either call a Windows function, or you call a function written in C or C++. Here are the
+  characteristics and requirements of this calling convention:
+      1. The CALL instruction subtracts 8 from the RSP (stack pointer) register, since addresses are
+         64 bits long.
+      2. The first four parameters passed to a subroutine are placed in the RCX, RDX, R8, and R9,
+         registers, in that order. So if only one parameter is passed, it will be placed in RCX. If there
+         is a second parameter, it will be placed in RDX, and so on. Additional parameters are
+         pushed on the stack, in left-to-right order.
+      3. Parameters less than 64 bits long are not zero extended, so the upper bits have indeterminate
+         values.
+      4. If the return value is an integer whose size is less than or equal to 64 bits, it must be
+         returned in the RAX register.
+      5. It is the caller’s responsibility to allocate at least 32 bytes of shadow space on the runtime
+         stack, so called subroutines can optionally save the register parameters in this area.
+      6. When calling a subroutine, the stack pointer (RSP) must be aligned on a 16-byte boundary.
+         The CALL instruction pushes an 8-byte return address on the stack, so the calling program
+         must subtract 8 from the stack pointer, in addition to the 32 it subtracts for the register
+         parameters.
+      7. It is the calling program’s responsibility to remove all parameters and shadow space from
+         the runtime stack after the called subroutine has finished.
+      8. A return value larger than 64 bits is placed on the runtime stack, and RCX points to its
+         location.
+      9. The RAX, RCX, RDX, R8, R9, R10, and R11 registers are often altered by subroutines, so
+         if the calling program wants them preserved, it will push them on the stack before the subroutine
+         call, and pop them off the stack afterwards.
+      10. The values of the RBX, RBP, RDI, RSI, R12, R14, R14, and R15 registers must be preserved
+          by subroutines.
 
-
-
+  The C calling convention was established by the C programming language, the language used to create both Unix and Windows. The STDCALL
+  calling convention describes the protocol for calling Windows API functions. Both are important, since you may find yourself calling
+  assembly functions from C and C++ programs, and your assembly language programs will also likely call numerous Windows API functions.
+  The C Calling Convention The C calling convention is used by the C and C++ programming languages. Subroutine parameters are pushed on
+  the stack in reverse order, so a C program making a function call such as this will first push B on the stack, and then push A:
+          AddTwo( A, B )
+  The C calling convention solves the problem of cleaning up the runtime stack in a simple way: When a program calls a subroutine, it
+  follows the CALL instruction with a statement that adds a value to the stack pointer (ESP) equal to the combined sizes of the
+  subroutine parameters. Here is an example in which two arguments (5 and 6) are pushed on the stack before executing a CALL instruction:
+          Example1 PROC
+          push 6
+          push 5
+          call AddTwo
+          add esp,8 ; remove arguments from the stack
+          ret
+          Example1 ENDP
+  Therefore, programs written in C/C++ always remove arguments from the stack in the calling program after a subroutine has returned.
+  STDCALL Calling Convention Another common way to remove parameters from the stack is to use a convention named STDCALL. In the
+  following AddTwo procedure, we supply an integer parameter to the RET instruction, which in turn adds 8 to ESP after returning to the
+  calling procedure. The integer must equal the number of bytes of stack space consumed by the procedure’s parameters:
+          AddTwo PROC
+          push ebp
+          mov ebp,esp ; base of stack frame
+          mov eax,[ebp + 12] ; second parameter
+          add eax,[ebp + 8] ; first parameter
+          pop ebp
+          ret 8 ; clean up the stack
+          AddTwo ENDP
+  It should be pointed out that STDCALL, like C, pushes arguments onto the stack in reverse order. By having a parameter in the RET
+  instruction, STDCALL reduces the amount of code.
 
 void myFunction(int a, int b, int c, int d, int e, int f) {
   //some code
