@@ -18,7 +18,6 @@
   but most often are not considered part of it (or vice versa), as the evaluation strategy is usually defined on a higher abstraction
   level and seen as a part of the language rather than as a low-level implementation detail of a particular language's compiler.
 
-
 3. Why do the book examples always start functions with "push ebp" and "mov ebp, esp"?
   Subroutines often save the current contents of registers on the stack before modifying them. This is a good practice, because the
   original values can be restored just before the subroutine returns. Ideally, the registers in question should be pushed on the stack
@@ -44,9 +43,11 @@
   from EBP of parameters already on the stack because the stack grows below EBP.
 
 4. What is the x64 equivalent to "push ebp" and "mov ebp, esp"?
-
-
-
+  When calling a subroutine, the stack pointer (RSP) must be aligned on a 16-byte boundary. The CALL instruction pushes an 8-byte return
+  address on the stack, so the calling program must subtract 8 from the stack pointer, in addition to the 32 it subtracts for the
+  register parameters. The RAX, RCX, RDX, R8, R9, R10, and R11 registers are often altered by subroutines, so if the calling program
+  wants them preserved, it will push them on the stack before the subroutine call, and pop them off the stack afterwards. The values of
+  the RBX, RBP, RDI, RSI, R12, R14, R14, and R15 registers must be preserved by subroutines.
 
 5. What are the differences between "Microsoft x64 calling convention" and "System V AMD64 ABI calling convention"?
   Microsoft follows a consistent scheme for passing parameters and calling subroutines in 64-bit programs, known as the Microsoft x64
